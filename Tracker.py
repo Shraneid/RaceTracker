@@ -1,8 +1,8 @@
-from random import random
-from typing import List
-
 import cv2
 import numpy as np
+
+from random import random
+from typing import List
 
 from HelperObjects import Line
 
@@ -14,7 +14,7 @@ class Tracker:
     left_line: Line
     right_line: Line
     previous_all_lines: List[Line]
-    tracked_lines: list[Line]
+    tracked_lines: List[Line]
     difference_threshold: int
 
     def __init__(self):
@@ -32,10 +32,29 @@ class Tracker:
         self.all_lines = []
         self.previous_all_lines = []
         self.tracked_lines = []
-
         self.deduplicated_lines = []
 
         self.difference_threshold = 50
+
+    def update_all_lines(self):
+        lines_output = cv2.HoughLines(self.edges_image, 1, np.pi / 720, 80)
+
+        self.all_lines = []
+        if lines_output is not None:
+            for line in lines_output:
+                rho, theta = line[0]
+                line_object = Line.get_line_from_parameters(rho, theta)
+
+                self.all_lines.append(line_object)
+        # self.all_lines = [lines[0]]
+
+    def update_deduplicated_lines(self) -> None:
+        self.deduplicated_lines = []
+
+        # need to remove like this so __eq__ is called since set() will call the __hash__ method
+        for line in self.all_lines:
+            if line not in self.deduplicated_lines:
+                self.deduplicated_lines.append(line)
 
     def update(self) -> None:
         if self.previous_all_lines is not None \
@@ -48,8 +67,6 @@ class Tracker:
 
             self.initialized = True
             print("Initialization Done, starting")
-        else:
-            self.previous_all_lines = self.deduplicated_lines
 
         if self.initialized:
             # here we shuffle so that we get a random line from a cluster of lines each time, since Hough lines work
@@ -74,18 +91,12 @@ class Tracker:
 
         self.previous_all_lines = self.deduplicated_lines
 
+    # TODO: create an image handler object instead of doing it in the tracker
+    def get_image(self):
+        return self.image
+
     def set_image(self, image):
         self.image = image
-
-    def add_lines_to_image(self):
-        if self.deduplicated_lines is not None:
-            for line in self.deduplicated_lines:
-                cv2.line(
-                    self.image,
-                    (line.firstPoint.x, line.firstPoint.y),
-                    (line.secondPoint.x, line.secondPoint.y),
-                    (0, 255, 0), 2
-                )
 
     def pre_process_image(self, mask):
         # to HSV
@@ -108,26 +119,21 @@ class Tracker:
 
         self.pre_processed_image = self.edges_image
 
-    def update_all_lines(self):
-        lines_output = cv2.HoughLines(self.edges_image, 1, np.pi / 720, 80)
+    def add_lines_to_image(self):
+        if self.deduplicated_lines is not None:
+            for line in self.deduplicated_lines:
+                cv2.line(
+                    self.image,
+                    (line.firstPoint.x, line.firstPoint.y),
+                    (line.secondPoint.x, line.secondPoint.y),
+                    (0, 255, 0), 2
+                )
 
-        self.all_lines = []
-        if lines_output is not None:
-            for line in lines_output:
-                rho, theta = line[0]
-                line_object = Line.get_line_from_parameters(rho, theta)
-
-                self.all_lines.append(line_object)
-        # self.all_lines = [lines[0]]
-
-    def update_deduplicated_lines(self) -> None:
-        self.deduplicated_lines = []
-
-        # need to remove like this so __eq__ is called since set() will call the __hash__ method
-        for line in self.all_lines:
-            if line not in self.deduplicated_lines:
-                self.deduplicated_lines.append(line)
-
-    # TODO: create an image handler object instead of doing it in the tracker
-    def get_image(self):
-        return self.image
+        if self.tracked_lines is not None:
+            for line in self.tracked_lines:
+                cv2.line(
+                    self.image,
+                    (line.firstPoint.x, line.firstPoint.y),
+                    (line.secondPoint.x, line.secondPoint.y),
+                    (255, 0, 0), 2
+                )

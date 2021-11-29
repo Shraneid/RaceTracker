@@ -28,6 +28,9 @@ def init_cv2_window(control_window_name) -> None:
 
 
 def get_white_mask(control_window_name) -> numpy.array:
+    if control_window_name is None:
+        return np.array([0, 0, 125]), np.array([12, 80, 229])
+
     # get mask values
     low1 = cv2.getTrackbarPos('low1', control_window_name)
     low2 = cv2.getTrackbarPos('low2', control_window_name)
@@ -50,10 +53,14 @@ def main():
     # mode and then gets stuck once in full screen or hidden, so if the controls window doesn't show or bugs out,
     # you can increment the counter :D (tried to debug it for 1 hr, no idea why it won't even listen when you force
     # the window mode)
-    control_window_name = 'controls5'
+    show_sliders = False
+    control_window_name = 'controls6'
+    if not show_sliders:
+        control_window_name = None
 
     with mss.mss() as sct:
-        init_cv2_window(control_window_name)
+        if show_sliders:
+            init_cv2_window(control_window_name)
 
         # l1 = Line(0, 0, 10, 10)
         # l2 = Line(0, 1, 10, 10)
@@ -90,10 +97,14 @@ def main():
 
             running_lines_tracker.update()
 
-            # print(len(lines))
+            running_lines_tracker.add_lines_to_image()
 
+            # print(len(lines))
             cv2.imshow("RACE_TRACKER", running_lines_tracker.get_image())
             cv2.imshow("DEBUG", running_lines_tracker.edges_image)
+
+            if cv2.waitKey(1) & 0xFF == ord("h"):
+                pass
 
 
 if __name__ == "__main__":
