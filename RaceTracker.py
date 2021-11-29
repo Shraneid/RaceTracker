@@ -22,6 +22,9 @@ class Point:
     def __hash__(self):
         return hash(int(self.x * 1000 + self.y))
 
+    def get_distance_to(self, other_point) -> int:
+        return int(math.sqrt((self.x - other_point.x) ** 2 + (self.y - other_point.y) ** 2))
+
 
 # This class defines all the lines that we work with, the __eq__ method is called when we deduplicate similar lines in
 # the processing. The middle point spread is the max distance between two different lines middle points that is used
@@ -44,7 +47,7 @@ class Line:
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and \
-               get_distance_between_points(self.centerPoint, other.centerPoint) < self.middle_point_spread
+               self.centerPoint.get_distance_to(other.centerPoint) < self.middle_point_spread
 
     def __hash__(self):
         return hash(self.centerPoint.__hash__())
@@ -57,10 +60,22 @@ class Line:
             return abs(int((self.firstPoint.x - self.secondPoint.x) / (self.firstPoint.y - self.secondPoint.y)))
         return 1000  # vertical line
 
+    def get_difference_with(self, line2) -> int:
+        slope_diff = abs(self.slope() - line2.slope())
+        x_diff = abs(self.centerPoint.x - line2.centerPoint.x)
+        return int(x_diff + slope_diff * 4)
+
 
 # Main class of our tracker, this is keeping track of the lines we have interest in and tracks them over time
 # There is an initialisation period during which the lines are not checked with the previous ones.
 class Tracker:
+    initialized: bool
+    left_line: Line
+    right_line: Line
+    previous_all_lines: List[Line]
+    tracked_lines: list[Line]
+    difference_threshold: int
+
     def __init__(self):
         self.initialized = False
         self.left_line = None
@@ -70,7 +85,14 @@ class Tracker:
         self.difference_threshold = 50
 
     def update(self, new_lines: List[Line]) -> None:
-        if self.previous_all_lines is not None and not self.initialized and new_lines != self.previous_all_lines:
+        if self.previous_all_lines is not None \
+                and len(self.previous_all_lines) == 2 \
+                and self.previous_all_lines[0].get_difference_with(self.previous_all_lines[1]) > 200 \
+                and not self.initialized and new_lines != self.previous_all_lines:
+            # We revert them at the end anyways so we can just assign randomly
+            self.left_line = self.previous_all_lines[0]
+            self.right_line = self.previous_all_lines[1]
+
             self.initialized = True
             print("Initialization Done, starting")
         else:
@@ -83,10 +105,14 @@ class Tracker:
             new_lines = sorted(new_lines, key=lambda x: random())
             self.tracked_lines = new_lines
 
+            # if no new line is found, that means we might have not found a matching line on the new image so we don't
+            # update
+            # TODO: update with how much the other one is moved (failsafe mechanism when none are found)
             for tracked_line in self.tracked_lines:
                 for new_line in new_lines:
-                    if difference(new_line, tracked_line) < self.difference_threshold:
-                        tracked_line = new_line
+                    if new_line.get_difference_with(tracked_line) < self.difference_threshold:
+                        # update old tracked line, this is why we need the shuffle
+                        self.tracked_lines[self.tracked_lines.index(tracked_line)] = new_line
                         break
 
             # keep track of which is where for the tracker to know if we are too far right or left
@@ -94,16 +120,6 @@ class Tracker:
                 self.right_line, self.left_line = self.left_line, self.right_line
 
         self.previous_all_lines = new_lines
-
-
-def difference(line1: Line, line2: Line) -> int:
-    slope_diff = abs(line1.slope() - line2.slope())
-    x_diff = abs(line1.centerPoint.x - line2.centerPoint.x)
-    return int(x_diff + slope_diff * 4)
-
-
-def get_distance_between_points(p1, p2) -> int:
-    return int(math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2))
 
 
 def get_deduplicated_lines(lines) -> List[Line]:
