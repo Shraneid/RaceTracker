@@ -65,6 +65,19 @@ class Line:
         x_diff = abs(self.centerPoint.x - line2.centerPoint.x)
         return int(x_diff + slope_diff * 4)
 
+    @staticmethod
+    def get_line_from_parameters(rho, theta):
+        a = np.cos(theta)
+        b = np.sin(theta)
+        x0 = a * rho
+        y0 = b * rho
+        x1 = int(x0 + 1000 * (-b))
+        y1 = int(y0 + 1000 * a)
+        x2 = int(x0 - 1000 * (-b))
+        y2 = int(y0 - 1000 * a)
+
+        return Line(x1, y1, x2, y2)
+
 
 # Main class of our tracker, this is keeping track of the lines we have interest in and tracks them over time
 # There is an initialisation period during which the lines are not checked with the previous ones.
@@ -78,10 +91,22 @@ class Tracker:
 
     def __init__(self):
         self.initialized = False
+
+        self.image = None
+        self.hsv_image = None
+        self.threshold_image = None
+        self.edges_image = None
+        self.pre_processed_image = None
+
         self.left_line = None
         self.right_line = None
-        self.previous_all_lines = None
+
+        self.all_lines = []
+        self.previous_all_lines = []
         self.tracked_lines = []
+
+        self.deduplicated_lines = []
+
         self.difference_threshold = 50
 
     def update(self, new_lines: List[Line]) -> None:
@@ -121,18 +146,65 @@ class Tracker:
 
         self.previous_all_lines = new_lines
 
+    def set_image(self, image):
+        self.image = image
 
-def get_deduplicated_lines(lines) -> List[Line]:
-    dedup_lines = []
+    def add_lines_to_image(self):
+        if self.deduplicated_lines is not None:
+            for line in self.deduplicated_lines:
+                cv2.line(
+                    self.image,
+                    (line.firstPoint.x, line.firstPoint.y),
+                    (line.secondPoint.x, line.secondPoint.y),
+                    (0, 255, 0), 2
+                )
 
-    # need to remove like this so __eq__ is called since set() will call the __hash__ method
-    for line in lines:
-        if line not in dedup_lines:
-            dedup_lines.append(line)
+    def pre_process_image(self, mask):
+        # to HSV
+        self.hsv_image = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
 
-    return dedup_lines
+        # mask out unwanted pixel colors
+        self.threshold_image = cv2.inRange(self.hsv_image, mask[0], mask[1])
+
+        # percent of original size
+        # scale_percent = 30
+        # width = int(threshold_img.shape[1] * scale_percent / 100)
+        # height = int(threshold_img.shape[0] * scale_percent / 100)
+        # resized = cv2.resize(threshold_img, (width, height), interpolation=cv2.INTER_NEAREST)
+
+        # convert to gray
+        # gray = cv2.cvtColor(threshold_img, cv2.COLOR_BGR2GRAY)
+
+        # edge detection
+        self.edges_image = cv2.Canny(self.threshold_image, 50, 150, apertureSize=3)
+
+        self.pre_processed_image = self.edges_image
+
+    def update_all_lines(self):
+        lines_output = cv2.HoughLines(self.edges_image, 1, np.pi / 720, 80)
+
+        self.all_lines = []
+        if lines_output is not None:
+            for line in lines_output:
+                rho, theta = line[0]
+                line_object = Line.get_line_from_parameters(rho, theta)
+
+                self.all_lines.append(line_object)
+        # self.all_lines = [lines[0]]
+
+    def update_deduplicated_lines(self) -> None:
+        self.deduplicated_lines = []
+
+        # need to remove like this so __eq__ is called since set() will call the __hash__ method
+        for line in self.all_lines:
+            if line not in self.deduplicated_lines:
+                self.deduplicated_lines.append(line)
+
+    def get_image(self):
+        return self.image
 
 
+# noinspection PyUnusedLocal
 def nop(value: object) -> None:
     pass
 
@@ -147,27 +219,6 @@ def init_cv2_window(control_window_name) -> None:
     cv2.createTrackbar('high3', control_window_name, 229, 255, nop)
 
 
-def process_image(image, mask):
-    # to HSV
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    # mask out unwanted pixel colors
-    threshold_img = cv2.inRange(hsv, mask[0], mask[1])
-
-    # percent of original size
-    scale_percent = 30
-    width = int(threshold_img.shape[1] * scale_percent / 100)
-    height = int(threshold_img.shape[0] * scale_percent / 100)
-    resized = cv2.resize(threshold_img, (width, height), interpolation=cv2.INTER_NEAREST)
-
-    # convert to gray
-    # gray = cv2.cvtColor(threshold_img, cv2.COLOR_BGR2GRAY)
-
-    edges = cv2.Canny(threshold_img, 50, 150, apertureSize=3)
-
-    return edges
-
-
 def get_white_mask(control_window_name) -> numpy.array:
     # get mask values
     low1 = cv2.getTrackbarPos('low1', control_window_name)
@@ -179,37 +230,6 @@ def get_white_mask(control_window_name) -> numpy.array:
     high3 = cv2.getTrackbarPos('high3', control_window_name)
 
     return np.array([low1, low2, low3]), np.array([high1, high2, high3])
-
-
-def get_line_from_parameters(rho, theta):
-    a = np.cos(theta)
-    b = np.sin(theta)
-    x0 = a * rho
-    y0 = b * rho
-    x1 = int(x0 + 1000 * (-b))
-    y1 = int(y0 + 1000 * a)
-    x2 = int(x0 - 1000 * (-b))
-    y2 = int(y0 - 1000 * a)
-
-    return Line(x1, y1, x2, y2)
-
-
-def get_lines(img):
-    linesOutput = cv2.HoughLines(img, 1, np.pi / 720, 80)
-
-    lines = []
-    if linesOutput is not None:
-        for line in linesOutput:
-            rho, theta = line[0]
-            line_object = get_line_from_parameters(rho, theta)
-
-            lines.append(line_object)
-
-    else:
-        lines = []
-
-    # return [lines[0]]
-    return lines
 
 
 def main():
@@ -247,39 +267,25 @@ def main():
         running_lines_tracker = Tracker()
 
         while "Screen capturing":
-            last_time = time.time()
+            # last_time = time.time()
 
             white_mask = get_white_mask(control_window_name)
 
             # get image, replace by any source
-            img = np.array(sct.grab(video_source))
+            running_lines_tracker.set_image(np.array(sct.grab(video_source)))
 
             # pre process image for hough line
-            processed_image = process_image(img, white_mask)
+            running_lines_tracker.pre_process_image(white_mask)
 
-            all_lines = get_lines(processed_image)
-            lines = get_deduplicated_lines(all_lines)
+            running_lines_tracker.update_all_lines()
+            running_lines_tracker.update_deduplicated_lines()
 
-            running_lines_tracker.update(lines)
+            running_lines_tracker.update()
 
             # print(len(lines))
 
-            # display final lines on main window
-            if lines is not None:
-                for line in lines:
-                    cv2.line(
-                        img,
-                        (line.firstPoint.x, line.firstPoint.y),
-                        (line.secondPoint.x, line.secondPoint.y),
-                        (0, 255, 0), 2
-                    )
-
-            cv2.imshow("RACE_TRACKER", img)
-            cv2.imshow("DEBUG", processed_image)
-
-            if cv2.waitKey(1) & 0xFF == ord("s"):
-                initialised = True
-                print("Initialisation Done")
+            cv2.imshow("RACE_TRACKER", running_lines_tracker.get_image())
+            cv2.imshow("DEBUG", running_lines_tracker.edges_image)
 
 
 if __name__ == "__main__":
