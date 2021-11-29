@@ -30,33 +30,40 @@ class Line:
         self.y1 = y1
         self.x2 = x2
         self.y2 = y2
-        self.firstPoint = Point(x1, y1)
-        self.secondPoint = Point(x2, y2)
+        self.pointOne = Point(x1, y1)
+        self.pointTwo = Point(x2, y2)
 
         center_point_x = abs(int(x1 + x2 / 2))
         center_point_y = abs(int(y1 + y2 / 2))
 
-        self.centerPoint = Point(center_point_x, center_point_y)
+        self.middlePoint = Point(center_point_x, center_point_y)
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and \
-               self.centerPoint.get_distance_to(other.centerPoint) < self.middle_point_spread
+               self.middlePoint.get_distance_to(other.middlePoint) < self.middle_point_spread
 
     def __hash__(self):
-        return hash(self.centerPoint.__hash__())
+        return hash(self.middlePoint.__hash__())
 
     def is_left_of(self, other) -> bool:
-        return self.centerPoint.x < other.centerPoint.x
+        return self.middlePoint.x < other.middlePoint.x
 
-    def slope(self) -> int:
-        if self.firstPoint.y - self.secondPoint.y != 0:  # div by 0
-            return abs(int((self.firstPoint.x - self.secondPoint.x) / (self.firstPoint.y - self.secondPoint.y)))
-        return 1000  # vertical line
+    def abs_slope(self) -> int:
+        slope = 1000  # vertical line
+        if self.pointOne.y - self.pointTwo.y != 0:  # div by 0
+            slope = abs((self.pointOne.x - self.pointTwo.x) / (self.pointOne.y - self.pointTwo.y))
+
+        return slope
 
     def get_difference_with(self, line2) -> int:
-        slope_diff = abs(self.slope() - line2.slope())
-        x_diff = abs(self.centerPoint.x - line2.centerPoint.x)
-        return int(x_diff + slope_diff * 4)
+        slope_diff = abs(self.abs_slope() - line2.abs_slope())
+        low_point_line_1 = self.pointOne if self.y1 > self.y2 else self.pointTwo
+        low_point_line_2 = line2.pointOne if line2.y1 > line2.y2 else line2.pointTwo
+        x_diff = (abs(low_point_line_1.x - low_point_line_2.x)/10 +
+                  abs(self.middlePoint.get_distance_to(line2.middlePoint))/10)**2
+
+        print(int(x_diff * 10 + slope_diff * 4))
+        return int(x_diff * 10 + slope_diff * 4)
 
     @staticmethod
     def get_line_from_parameters(rho, theta):

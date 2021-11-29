@@ -53,7 +53,7 @@ def main():
     # mode and then gets stuck once in full screen or hidden, so if the controls window doesn't show or bugs out,
     # you can increment the counter :D (tried to debug it for 1 hr, no idea why it won't even listen when you force
     # the window mode)
-    show_sliders = False
+    show_sliders = True
     control_window_name = 'controls6'
     if not show_sliders:
         control_window_name = None
@@ -62,24 +62,7 @@ def main():
         if show_sliders:
             init_cv2_window(control_window_name)
 
-        # l1 = Line(0, 0, 10, 10)
-        # l2 = Line(0, 1, 10, 10)
-        # l3 = Line(0, 1, 1000, 1000)
-        #
-        # print(l1.centerPoint.__hash__())
-        # print(l1.__hash__())
-        # print(l1.__eq__(l2))
-        #
-        # lst = [l1, l2, l3]
-        # s = set(lst)
-        # l = []
-        # for i in lst:
-        #     if i not in l:
-        #         l.append(i)
-        #
-        # brk = 0
-
-        running_lines_tracker = Tracker()
+        running_lines_tracker = Tracker(x_difference_threshold=2000)
 
         while "Screen capturing":
             # last_time = time.time()

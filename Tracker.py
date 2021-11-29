@@ -15,9 +15,11 @@ class Tracker:
     right_line: Line
     previous_all_lines: List[Line]
     tracked_lines: List[Line]
-    difference_threshold: int
+    x_difference_threshold: int
 
-    def __init__(self):
+    def __init__(self, x_difference_threshold):
+        self.x_difference_threshold = x_difference_threshold
+
         self.initialized = False
 
         self.image = None
@@ -33,8 +35,6 @@ class Tracker:
         self.previous_all_lines = []
         self.tracked_lines = []
         self.deduplicated_lines = []
-
-        self.difference_threshold = 50
 
     def update_all_lines(self):
         lines_output = cv2.HoughLines(self.edges_image, 1, np.pi / 720, 80)
@@ -59,11 +59,14 @@ class Tracker:
     def update(self) -> None:
         if self.previous_all_lines is not None \
                 and len(self.previous_all_lines) == 2 \
-                and self.previous_all_lines[0].get_difference_with(self.previous_all_lines[1]) > 200 \
+                and self.previous_all_lines[0].get_difference_with(self.previous_all_lines[1]) > \
+                self.x_difference_threshold \
                 and not self.initialized and self.deduplicated_lines != self.previous_all_lines:
             # We revert them at the end anyways so we can just assign randomly
             self.left_line = self.previous_all_lines[0]
             self.right_line = self.previous_all_lines[1]
+
+            self.tracked_lines = self.previous_all_lines
 
             self.initialized = True
             print("Initialization Done, starting")
@@ -73,17 +76,22 @@ class Tracker:
             # with a circular algorithm, it would always give the lines on the inside or outside, that way we can
             # sort of keep an average
             self.deduplicated_lines = sorted(self.deduplicated_lines, key=lambda x: random())
-            self.tracked_lines = self.deduplicated_lines
 
             # if no new line is found, that means we might have not found a matching line on the new image so we don't
             # update
             # TODO: update with how much the other one is moved (failsafe mechanism when none are found)
             for tracked_line in self.tracked_lines:
+                new_tracked_line = None
                 for new_line in self.deduplicated_lines:
-                    if new_line.get_difference_with(tracked_line) < self.difference_threshold:
+                    current_diff = self.x_difference_threshold
+
+                    # print(new_line.get_difference_with(tracked_line))
+                    if new_line.get_difference_with(tracked_line) < self.x_difference_threshold \
+                            and new_line.get_difference_with(tracked_line) < current_diff:
                         # update old tracked line, this is why we need the shuffle
-                        self.tracked_lines[self.tracked_lines.index(tracked_line)] = new_line
-                        break
+                        new_tracked_line = new_line
+                if new_tracked_line is not None:
+                    self.tracked_lines[self.tracked_lines.index(tracked_line)] = new_tracked_line
 
             # keep track of which is where for the tracker to know if we are too far right or left
             if self.right_line.is_left_of(self.left_line):
@@ -124,8 +132,8 @@ class Tracker:
             for line in self.deduplicated_lines:
                 cv2.line(
                     self.image,
-                    (line.firstPoint.x, line.firstPoint.y),
-                    (line.secondPoint.x, line.secondPoint.y),
+                    (line.pointOne.x, line.pointOne.y),
+                    (line.pointTwo.x, line.pointTwo.y),
                     (0, 255, 0), 2
                 )
 
@@ -133,7 +141,7 @@ class Tracker:
             for line in self.tracked_lines:
                 cv2.line(
                     self.image,
-                    (line.firstPoint.x, line.firstPoint.y),
-                    (line.secondPoint.x, line.secondPoint.y),
+                    (line.pointOne.x, line.pointOne.y),
+                    (line.pointTwo.x, line.pointTwo.y),
                     (255, 0, 0), 2
                 )
