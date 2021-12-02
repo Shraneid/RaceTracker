@@ -5,7 +5,6 @@ from typing import List
 
 import cv2
 import mss
-import numpy
 import numpy as np
 
 
@@ -23,13 +22,13 @@ def init_cv2_window(control_window_name) -> None:
     cv2.createTrackbar('low2', control_window_name, 0, 255, nop)
     cv2.createTrackbar('low3', control_window_name, 125, 255, nop)
     cv2.createTrackbar('high1', control_window_name, 12, 255, nop)
-    cv2.createTrackbar('high2', control_window_name, 80, 255, nop)
+    cv2.createTrackbar('high2', control_window_name, 100, 255, nop)
     cv2.createTrackbar('high3', control_window_name, 229, 255, nop)
 
 
-def get_white_mask(control_window_name) -> numpy.array:
+def get_white_mask(control_window_name) -> np.array:
     if control_window_name is None:
-        return np.array([0, 0, 125]), np.array([12, 80, 229])
+        return np.array([0, 0, 125]), np.array([12, 100, 229])
 
     # get mask values
     low1 = cv2.getTrackbarPos('low1', control_window_name)
@@ -62,7 +61,7 @@ def main():
         if show_sliders:
             init_cv2_window(control_window_name)
 
-        running_lines_tracker = Tracker(x_difference_threshold=2000)
+        running_lines_tracker = Tracker(x_difference_threshold=15000, threshold=50)
 
         while "Screen capturing":
             # last_time = time.time()
@@ -82,9 +81,11 @@ def main():
 
             running_lines_tracker.add_lines_to_image()
 
+            running_lines_tracker.process_is_running_straight()
+
             # print(len(lines))
             cv2.imshow("RACE_TRACKER", running_lines_tracker.get_image())
-            cv2.imshow("DEBUG", running_lines_tracker.edges_image)
+            cv2.imshow("DEBUG", running_lines_tracker.pre_processed_image)
 
             if cv2.waitKey(1) & 0xFF == ord("h"):
                 pass

@@ -62,8 +62,14 @@ class Line:
         x_diff = (abs(low_point_line_1.x - low_point_line_2.x)/10 +
                   abs(self.middlePoint.get_distance_to(line2.middlePoint))/10)**2
 
-        print(int(x_diff * 10 + slope_diff * 4))
+        # print(int(x_diff * 10 + slope_diff * 4))
         return int(x_diff * 10 + slope_diff * 4)
+
+    def get_low_and_high_points(self):
+        if self.pointOne.y > self.pointTwo.y:
+            return self.pointTwo, self.pointOne
+        else:
+            return self.pointOne, self.pointTwo
 
     @staticmethod
     def get_line_from_parameters(rho, theta):

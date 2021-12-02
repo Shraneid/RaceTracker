@@ -17,8 +17,10 @@ class Tracker:
     tracked_lines: List[Line]
     x_difference_threshold: int
 
-    def __init__(self, x_difference_threshold):
+    def __init__(self, x_difference_threshold, threshold):
         self.x_difference_threshold = x_difference_threshold
+        self.right_threshold = 350/2 + threshold
+        self.left_threshold = 350/2 - threshold
 
         self.initialized = False
 
@@ -35,9 +37,10 @@ class Tracker:
         self.previous_all_lines = []
         self.tracked_lines = []
         self.deduplicated_lines = []
+        self.possible_lines = []
 
     def update_all_lines(self):
-        lines_output = cv2.HoughLines(self.edges_image, 1, np.pi / 720, 80)
+        lines_output = cv2.HoughLines(self.pre_processed_image, 1, np.pi / (720 * 2), 180)
 
         self.all_lines = []
         if lines_output is not None:
@@ -72,17 +75,13 @@ class Tracker:
             print("Initialization Done, starting")
 
         if self.initialized:
-            # here we shuffle so that we get a random line from a cluster of lines each time, since Hough lines work
-            # with a circular algorithm, it would always give the lines on the inside or outside, that way we can
-            # sort of keep an average
-            self.deduplicated_lines = sorted(self.deduplicated_lines, key=lambda x: random())
+            self.possible_lines = self.deduplicated_lines.copy()
 
             # if no new line is found, that means we might have not found a matching line on the new image so we don't
             # update
-            # TODO: update with how much the other one is moved (failsafe mechanism when none are found)
             for tracked_line in self.tracked_lines:
-                new_tracked_line = None
-                for new_line in self.deduplicated_lines:
+                new_tracked_line: Line = None
+                for new_line in self.possible_lines:
                     current_diff = self.x_difference_threshold
 
                     # print(new_line.get_difference_with(tracked_line))
@@ -90,7 +89,9 @@ class Tracker:
                             and new_line.get_difference_with(tracked_line) < current_diff:
                         # update old tracked line, this is why we need the shuffle
                         new_tracked_line = new_line
-                if new_tracked_line is not None:
+                        self.possible_lines.remove(new_line)
+                if new_tracked_line is not None and \
+                        new_tracked_line.get_difference_with(self.tracked_lines[self.tracked_lines.index(tracked_line)]) < 10000:
                     self.tracked_lines[self.tracked_lines.index(tracked_line)] = new_tracked_line
 
             # keep track of which is where for the tracker to know if we are too far right or left
@@ -114,18 +115,19 @@ class Tracker:
         self.threshold_image = cv2.inRange(self.hsv_image, mask[0], mask[1])
 
         # percent of original size
-        # scale_percent = 30
-        # width = int(threshold_img.shape[1] * scale_percent / 100)
-        # height = int(threshold_img.shape[0] * scale_percent / 100)
-        # resized = cv2.resize(threshold_img, (width, height), interpolation=cv2.INTER_NEAREST)
+        scale_percent = 30
+        width = int(self.threshold_image.shape[1] * scale_percent / 100)
+        height = int(self.threshold_image.shape[0] * scale_percent / 100)
+        self.resized = cv2.resize(self.threshold_image, (width, height), interpolation=cv2.INTER_NEAREST)
 
         # convert to gray
         # gray = cv2.cvtColor(threshold_img, cv2.COLOR_BGR2GRAY)
 
         # edge detection
-        self.edges_image = cv2.Canny(self.threshold_image, 50, 150, apertureSize=3)
+        # self.edges_image = cv2.Canny(self.threshold_image, 50, 150, apertureSize=3)
 
-        self.pre_processed_image = self.edges_image
+        # self.pre_processed_image = self.edges_image
+        self.pre_processed_image = self.threshold_image
 
     def add_lines_to_image(self):
         if self.deduplicated_lines is not None:
@@ -145,3 +147,19 @@ class Tracker:
                     (line.pointTwo.x, line.pointTwo.y),
                     (255, 0, 0), 2
                 )
+
+    def process_is_running_straight(self) -> None:
+        if len(self.tracked_lines) != 2:
+            return
+
+        low1, _ = self.tracked_lines[0].get_low_and_high_points()
+        low2, _ = self.tracked_lines[1].get_low_and_high_points()
+
+        low_avg_x = (low1.x + low2.x) / 2
+
+        if self.left_threshold < low_avg_x < self.right_threshold:
+            print("straight")
+        elif low_avg_x < self.left_threshold:
+            print("too much left, go right")
+        elif self.right_threshold < low_avg_x:
+            print("too much right, go left")
